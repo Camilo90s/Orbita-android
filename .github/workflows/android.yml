@@ -1,0 +1,84 @@
+# Compila Orbita como app de Android (APK).
+# Descarga la app web del repositorio Camilo90s/orbit-3d, la empaqueta con Capacitor
+# y publica Orbita.apk en la pestaña Releases de este repositorio.
+name: APK de Android
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-android
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar este repositorio
+        uses: actions/checkout@v4
+
+      - name: Descargar la app web de Orbita (orbit-3d)
+        uses: actions/checkout@v4
+        with:
+          repository: Camilo90s/orbit-3d
+          path: web
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar Capacitor y sus complementos
+        run: npm install --no-audit --no-fund
+
+      - name: Preparar el proyecto Android
+        run: node scripts/preparar.js
+
+      - name: Preparar la llave de firma
+        env:
+          LLAVE: ${{ secrets.ORBITA_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$LLAVE" ]; then
+            echo "$LLAVE" | base64 -d > "$RUNNER_TEMP/orbita.jks"
+            echo "ORBITA_KEYSTORE_FILE=$RUNNER_TEMP/orbita.jks" >> "$GITHUB_ENV"
+            echo "Se firmará con la llave de Orbita."
+          else
+            echo "::warning::No hay llave de firma en los secretos; el APK se firma con una llave temporal."
+          fi
+
+      - name: Compilar el APK
+        working-directory: android
+        env:
+          ORBITA_KEYSTORE_PASSWORD: ${{ secrets.ORBITA_KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/Orbita.apk"
+
+      - name: Guardar el APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: Orbita-APK
+          path: Orbita.apk
+
+      - name: Publicar el APK en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Orbita para Android · compilación ${{ github.run_number }}
+          body: |
+            APK de Orbita · Laboratorio 3D de química, con la app web de Camilo90s/orbit-3d.
+            Descárgalo en el celular, ábrelo y permite instalar apps de este origen cuando Android lo pida.
+          files: Orbita.apk
+          make_latest: true
