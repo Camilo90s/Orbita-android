@@ -1,0 +1,7 @@
+# Se generan en cada compilación (scripts/preparar.js)
+node_modules/
+web/
+www/
+android/
+assets/*.png
+package-lock.json
